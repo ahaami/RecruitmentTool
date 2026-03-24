@@ -16,6 +16,9 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # --- Apollo.io ---
 APOLLO_API_KEY = os.environ.get("APOLLO_API_KEY", "")
 
+# --- Lusha ---
+LUSHA_API_KEY = os.environ.get("LUSHA_API_KEY", "")
+
 # --- Resend (email) ---
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 CALLSHEET_TO_EMAIL = os.environ.get("CALLSHEET_TO_EMAIL", "")
