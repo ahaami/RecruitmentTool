@@ -6,6 +6,16 @@ Run locally:  streamlit run dashboard/app.py
 Deploy:       Push to GitHub, connect to Streamlit Community Cloud
 """
 
+import sys
+from pathlib import Path
+
+# Ensure the repo root is on the Python path so imports like
+# "from dashboard.components.auth" work whether Streamlit runs
+# from the repo root or from inside the dashboard/ folder.
+_repo_root = str(Path(__file__).resolve().parent.parent)
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
 import streamlit as st
 
 st.set_page_config(
