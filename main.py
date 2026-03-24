@@ -13,7 +13,9 @@ Usage:
     python main.py monitor                             Re-check companies for new signals
     python main.py weekly-summary                      Send weekly pipeline summary email
     python main.py pause-stale                         Pause companies with no signals in 30+ days
-    python main.py run-all                             Run full daily pipeline
+    python main.py email-outreach [--limit N] [--dry-run]  Send personalised outreach emails
+    python main.py research <company_id>                 Generate AI research brief
+    python main.py run-all                               Run full daily pipeline
 """
 
 import argparse
@@ -229,6 +231,22 @@ def cmd_pause_stale(args):
     print(f"\n{len(stale.data)} companies paused. They'll reactivate if new signals are found.")
 
 
+def cmd_email_outreach(args):
+    """Send personalised outreach emails."""
+    from pipeline.email_outreach import run_email_outreach
+    run_email_outreach(limit=args.limit, dry_run=args.dry_run)
+
+
+def cmd_research(args):
+    """Generate an AI research brief for a company."""
+    from pipeline.research import generate_company_brief
+    brief = generate_company_brief(args.company_id)
+    if brief:
+        print(brief)
+    else:
+        print("Could not generate research brief. Check the company ID.")
+
+
 def cmd_run_all(args):
     """Run the full daily pipeline."""
     from scheduler import run_daily
@@ -292,6 +310,15 @@ def main():
     # pause-stale
     subparsers.add_parser("pause-stale", help="Pause companies with no signals in 30+ days")
 
+    # email-outreach
+    eo_parser = subparsers.add_parser("email-outreach", help="Send personalised outreach emails")
+    eo_parser.add_argument("--limit", type=int, default=10, help="Max emails to send")
+    eo_parser.add_argument("--dry-run", action="store_true", help="Generate but don't send")
+
+    # research
+    rs_parser = subparsers.add_parser("research", help="Generate AI research brief")
+    rs_parser.add_argument("company_id", help="Company UUID")
+
     # run-all
     subparsers.add_parser("run-all", help="Run full daily pipeline")
 
@@ -314,6 +341,8 @@ def main():
         "monitor": cmd_monitor,
         "weekly-summary": cmd_weekly_summary,
         "pause-stale": cmd_pause_stale,
+        "email-outreach": cmd_email_outreach,
+        "research": cmd_research,
         "run-all": cmd_run_all,
     }
 
