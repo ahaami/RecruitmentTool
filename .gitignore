@@ -1,0 +1,28 @@
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Claude Code local config
+.claude/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Output previews
+callsheet_preview.html
+weekly_summary_preview.html
+
+# Data
+*.csv
+*.xlsx

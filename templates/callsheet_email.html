@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 20px 24px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .header .date {
+            opacity: 0.8;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .header .stats {
+            margin-top: 12px;
+            display: flex;
+            gap: 20px;
+        }
+        .header .stat {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .header .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            opacity: 0.7;
+        }
+        .section {
+            padding: 16px 24px;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            margin: 0 0 12px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .lead {
+            padding: 14px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .lead:last-child {
+            border-bottom: none;
+        }
+        .lead-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .lead-rank {
+            display: inline-block;
+            background: #1a1a2e;
+            color: #fff;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .lead-company {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+        .lead-score {
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .score-high { background: #22c55e; }
+        .score-med { background: #f59e0b; }
+        .score-low { background: #94a3b8; }
+        .lead-meta {
+            color: #666;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .lead-contact {
+            margin-top: 8px;
+            background: #f8f9fa;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .lead-contact strong {
+            color: #1a1a2e;
+        }
+        .lead-signals {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #888;
+        }
+        .lead-opener {
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: #eff6ff;
+            border-left: 3px solid #3b82f6;
+            border-radius: 0 6px 6px 0;
+            font-size: 13px;
+            color: #1e40af;
+            font-style: italic;
+        }
+        .lead-links {
+            margin-top: 6px;
+            font-size: 12px;
+        }
+        .lead-links a {
+            color: #3b82f6;
+            text-decoration: none;
+            margin-right: 12px;
+        }
+        .footer {
+            padding: 16px 24px;
+            background: #f8f9fa;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Daily Call Sheet</h1>
+            <div class="date">{{ date }} &mdash; {{ day_of_week }}</div>
+            <div class="stats">
+                <div>
+                    <div class="stat">{{ leads | length }}</div>
+                    <div class="stat-label">Leads Today</div>
+                </div>
+                <div>
+                    <div class="stat">{{ retry_count }}</div>
+                    <div class="stat-label">Retries</div>
+                </div>
+                <div>
+                    <div class="stat">{{ total_in_pipeline }}</div>
+                    <div class="stat-label">In Pipeline</div>
+                </div>
+            </div>
+        </div>
+
+        {% if leads %}
+        <div class="section">
+            <div class="section-title">Today's Calls</div>
+
+            {% for lead in leads %}
+            <div class="lead">
+                <div class="lead-header">
+                    <div>
+                        <span class="lead-rank">{{ loop.index }}</span>
+                        <span class="lead-company">{{ lead.company_name }}</span>
+                    </div>
+                    <span class="lead-score {{ 'score-high' if lead.growth_score >= 50 else ('score-med' if lead.growth_score >= 30 else 'score-low') }}">
+                        Score: {{ lead.growth_score }}
+                    </span>
+                </div>
+
+                <div class="lead-meta">
+                    {{ lead.industry or 'Tech' }} &bull; {{ lead.company_city or 'Australia' }}{% if lead.headcount %} &bull; ~{{ lead.headcount }} employees{% endif %}
+                </div>
+
+                {% if lead.contact_name %}
+                <div class="lead-contact">
+                    <strong>{{ lead.contact_name }}</strong> &mdash; {{ lead.contact_title or 'Decision Maker' }}<br>
+                    {% if lead.email %}Email: {{ lead.email }}<br>{% endif %}
+                    {% if lead.phone %}Phone: {{ lead.phone }}<br>{% endif %}
+                    {% if lead.contact_linkedin %}
+                    <a href="{{ lead.contact_linkedin }}" style="color:#3b82f6;text-decoration:none;">LinkedIn Profile</a>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="lead-contact">
+                    <strong>No contact yet</strong> &mdash; Find DM via LinkedIn search below
+                </div>
+                {% endif %}
+
+                {% if lead.signals %}
+                <div class="lead-signals">
+                    Signals: {{ lead.signals }}
+                </div>
+                {% endif %}
+
+                {% if lead.opener %}
+                <div class="lead-opener">
+                    "{{ lead.opener }}"
+                </div>
+                {% endif %}
+
+                <div class="lead-links">
+                    {% if lead.company_linkedin %}
+                    <a href="{{ lead.company_linkedin }}">Company LinkedIn</a>
+                    {% endif %}
+                    {% if lead.company_website %}
+                    <a href="{{ lead.company_website }}">Website</a>
+                    {% endif %}
+                    {% if lead.linkedin_search %}
+                    <a href="{{ lead.linkedin_search }}">Find DMs on LinkedIn</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="section">
+            <p>No leads for today. Run <code>python main.py discover</code> and <code>python main.py enrich</code> to build your pipeline.</p>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            Recruiter Intelligence Tool &mdash; Powered by AI<br>
+            Generated at {{ generated_at }}
+        </div>
+    </div>
+</body>
+</html>

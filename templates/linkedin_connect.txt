@@ -1,0 +1,1 @@
+Hi {{ first_name }}, I noticed {{ company_name }} has been growing its {{ industry or 'tech' }} team lately - always great to see AU companies investing in talent. I work in IT recruitment and love connecting with leaders in the space. Would be great to be in touch!

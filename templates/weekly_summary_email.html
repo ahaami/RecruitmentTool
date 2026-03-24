@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 20px 24px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .header .date {
+            opacity: 0.8;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .stats-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+            padding: 0;
+        }
+        .stat-box {
+            flex: 1 1 33%;
+            padding: 16px 24px;
+            border-bottom: 1px solid #f0f0f0;
+            border-right: 1px solid #f0f0f0;
+            text-align: center;
+        }
+        .stat-box:nth-child(3n) {
+            border-right: none;
+        }
+        .stat-number {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+        .stat-number.highlight {
+            color: #22c55e;
+        }
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #888;
+            margin-top: 2px;
+        }
+        .section {
+            padding: 16px 24px;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            margin: 0 0 12px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .pipeline-bar {
+            display: flex;
+            height: 24px;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 12px 0;
+            background: #f0f0f0;
+        }
+        .pipeline-segment {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            min-width: 20px;
+        }
+        .seg-researching { background: #f59e0b; }
+        .seg-qualified { background: #3b82f6; }
+        .seg-active { background: #22c55e; }
+        .pipeline-legend {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .legend-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        .lead-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #f8f8f8;
+            font-size: 13px;
+        }
+        .lead-score {
+            background: #22c55e;
+            color: #fff;
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .alert-success {
+            background: #f0fdf4;
+            border-left: 3px solid #22c55e;
+            color: #166534;
+        }
+        .alert-warning {
+            background: #fffbeb;
+            border-left: 3px solid #f59e0b;
+            color: #92400e;
+        }
+        .footer {
+            padding: 16px 24px;
+            background: #f8f9fa;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Weekly Pipeline Summary</h1>
+            <div class="date">{{ week_start }} - {{ week_end }}</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-number">{{ stats.new_companies }}</div>
+                <div class="stat-label">New Companies</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number">{{ stats.new_contacts }}</div>
+                <div class="stat-label">New Contacts</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number">{{ stats.calls_made }}</div>
+                <div class="stat-label">Calls Made</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number">{{ stats.linkedin_sent }}</div>
+                <div class="stat-label">LinkedIn Sent</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number {{ 'highlight' if stats.meetings_booked > 0 else '' }}">{{ stats.meetings_booked }}</div>
+                <div class="stat-label">Meetings Booked</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number">{{ stats.total_pipeline }}</div>
+                <div class="stat-label">Active Pipeline</div>
+            </div>
+        </div>
+
+        {% if stats.meetings_booked > 0 %}
+        <div class="section">
+            <div class="alert alert-success">
+                Nice work! You booked {{ stats.meetings_booked }} meeting{{ 's' if stats.meetings_booked > 1 else '' }} this week.
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="section">
+            <div class="section-title">Pipeline Health</div>
+
+            {% set total = stats.pipeline.researching + stats.pipeline.qualified + stats.pipeline.active %}
+            {% if total > 0 %}
+            <div class="pipeline-bar">
+                {% if stats.pipeline.researching > 0 %}
+                <div class="pipeline-segment seg-researching" style="flex: {{ stats.pipeline.researching }};">{{ stats.pipeline.researching }}</div>
+                {% endif %}
+                {% if stats.pipeline.qualified > 0 %}
+                <div class="pipeline-segment seg-qualified" style="flex: {{ stats.pipeline.qualified }};">{{ stats.pipeline.qualified }}</div>
+                {% endif %}
+                {% if stats.pipeline.active > 0 %}
+                <div class="pipeline-segment seg-active" style="flex: {{ stats.pipeline.active }};">{{ stats.pipeline.active }}</div>
+                {% endif %}
+            </div>
+            <div class="pipeline-legend">
+                <span><span class="legend-dot" style="background:#f59e0b;"></span> Researching ({{ stats.pipeline.researching }})</span>
+                <span><span class="legend-dot" style="background:#3b82f6;"></span> Qualified ({{ stats.pipeline.qualified }})</span>
+                <span><span class="legend-dot" style="background:#22c55e;"></span> Active ({{ stats.pipeline.active }})</span>
+            </div>
+            {% endif %}
+
+            <div style="margin-top: 12px; font-size: 13px; color: #666;">
+                <div>In cooldown: {{ stats.cooldown_count }} &bull; Retries due: {{ stats.retries_due }}</div>
+                <div>Paused: {{ stats.pipeline.paused }} &bull; Dead: {{ stats.pipeline.dead }}</div>
+            </div>
+        </div>
+
+        {% if stats.top_leads %}
+        <div class="section">
+            <div class="section-title">Top Leads</div>
+            {% for lead in stats.top_leads %}
+            <div class="lead-row">
+                <span>{{ lead.name }} <span style="color:#888;font-size:12px;">{{ lead.city or '' }}</span></span>
+                <span class="lead-score">{{ lead.growth_score }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if stats.retries_due > 0 %}
+        <div class="section">
+            <div class="alert alert-warning">
+                You have {{ stats.retries_due }} retry follow-up{{ 's' if stats.retries_due > 1 else '' }} due. Check today's call sheet!
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            Recruiter Intelligence Tool &mdash; Weekly Summary<br>
+            Generated at {{ generated_at }}
+        </div>
+    </div>
+</body>
+</html>
