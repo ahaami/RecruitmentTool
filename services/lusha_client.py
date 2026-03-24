@@ -1,14 +1,18 @@
 """Lusha contact enrichment client.
 
 Finds decision-makers at target companies and retrieves their
-phone numbers and email addresses.
+phone numbers and email addresses using the Person API v2.
 
 API docs: https://docs.lusha.com/
-Free tier: 70 credits/month (1 credit per email, 10 per phone).
+Free tier: 50 credits, 10 calls/hour.
 
-Two-step flow:
-1. Prospecting API — search for people by company + title + location
-2. Person API — enrich a specific person with phone + email
+Strategy: Use the Person API to look up known contacts by name+company
+or LinkedIn URL. For discovering who to look up, we pair this with
+Apollo org data and LinkedIn search URLs.
+
+Usage:
+    from services.lusha_client import enrich_person
+    contact = enrich_person(first_name="Jane", last_name="Smith", company_name="Canva")
 """
 
 import httpx
@@ -108,80 +112,6 @@ def get_usage() -> dict | None:
     return None
 
 
-def prospect_contacts(
-    company_name: str | None = None,
-    company_domain: str | None = None,
-    titles: list[str] | None = None,
-    location: str = "Australia",
-    limit: int = 5,
-) -> list[dict]:
-    """Search for people at a company using Lusha Prospecting API.
-
-    Args:
-        company_name: Company name to search.
-        company_domain: Company domain (preferred, more accurate).
-        titles: Job titles to filter by. Defaults to TARGET_TITLES.
-        location: Geographic filter.
-        limit: Max results to return.
-
-    Returns:
-        List of prospect dicts with name, title, company info.
-    """
-    if not company_name and not company_domain:
-        return []
-
-    headers = _get_headers()
-
-    # Build prospecting search payload
-    filters = {
-        "limit": limit,
-    }
-
-    if company_domain:
-        filters["companyDomain"] = [company_domain]
-    elif company_name:
-        filters["companyName"] = [company_name]
-
-    if titles:
-        filters["jobTitle"] = titles
-    else:
-        filters["jobTitle"] = TARGET_TITLES
-
-    if location:
-        filters["location"] = [location]
-
-    try:
-        resp = httpx.post(
-            f"{LUSHA_BASE_URL}/prospecting/contact/search",
-            json=filters,
-            headers=headers,
-            timeout=30,
-        )
-
-        if resp.status_code == 401:
-            print("    Lusha: invalid API key")
-            return []
-
-        if resp.status_code == 403:
-            print("    Lusha: prospecting not available on your plan")
-            return []
-
-        if resp.status_code == 429:
-            print("    Lusha: rate limit hit, try again later")
-            return []
-
-        if resp.status_code != 200:
-            print(f"    Lusha prospecting error: {resp.status_code}")
-            return []
-
-        data = resp.json()
-        return data.get("contacts", data.get("data", []))
-
-    except httpx.HTTPError as e:
-        print(f"    Lusha HTTP error: {e}")
-        return []
-
-
 def enrich_person(
     first_name: str | None = None,
     last_name: str | None = None,
@@ -189,19 +119,12 @@ def enrich_person(
     company_domain: str | None = None,
     linkedin_url: str | None = None,
 ) -> LushaContact | None:
-    """Enrich a specific person with phone + email via Lusha Person API.
+    """Enrich a person with phone + email via Lusha Person API v2.
 
     Can look up by:
     - LinkedIn URL (most accurate)
     - Name + company domain
     - Name + company name
-
-    Args:
-        first_name: Person's first name.
-        last_name: Person's last name.
-        company_name: Company name.
-        company_domain: Company domain (preferred).
-        linkedin_url: LinkedIn profile URL (most accurate).
 
     Returns:
         LushaContact with email + phone, or None if not found.
@@ -231,11 +154,16 @@ def enrich_person(
             timeout=30,
         )
 
-        if resp.status_code in (401, 403):
+        if resp.status_code == 401:
+            print("    Lusha: invalid API key")
+            return None
+
+        if resp.status_code == 403:
+            print("    Lusha: access denied")
             return None
 
         if resp.status_code == 429:
-            print("    Lusha: rate limit / credits exhausted")
+            print("    Lusha: rate limit hit (10 calls/hour on free tier)")
             return None
 
         if resp.status_code == 404:
@@ -245,20 +173,28 @@ def enrich_person(
             return None
 
         data = resp.json()
-        person = data.get("data", data)
 
+        # Lusha v2 wraps the result in a 'contact' key
+        contact_data = data.get("contact", data.get("data", data))
+        if not contact_data:
+            return None
+
+        # Check for errors (e.g. compliance restrictions)
+        if isinstance(contact_data, dict) and contact_data.get("error"):
+            return None
+
+        person = contact_data.get("data", contact_data)
         if not person:
             return None
 
         # Extract email
         email = None
         email_type = None
-        emails = person.get("emails") or person.get("emailAddresses") or []
+        emails = person.get("emailAddresses") or person.get("emails") or []
         if isinstance(emails, list) and emails:
-            # Prefer business email
             for e in emails:
                 if isinstance(e, dict):
-                    if e.get("type", "").lower() == "business":
+                    if e.get("type", "").lower() in ("work", "business"):
                         email = e.get("email") or e.get("value")
                         email_type = "business"
                         break
@@ -269,19 +205,15 @@ def enrich_person(
                     email_type = first_email.get("type", "unknown")
                 elif isinstance(first_email, str):
                     email = first_email
-        elif isinstance(emails, str):
-            email = emails
 
-        # Also check top-level email field
         if not email:
             email = person.get("email")
 
         # Extract phone
         phone = None
         phone_type = None
-        phones = person.get("phones") or person.get("phoneNumbers") or []
+        phones = person.get("phoneNumbers") or person.get("phones") or []
         if isinstance(phones, list) and phones:
-            # Prefer mobile, then direct
             for p in phones:
                 if isinstance(p, dict):
                     ptype = (p.get("type") or "").lower()
@@ -296,10 +228,8 @@ def enrich_person(
                     phone_type = first_phone.get("type", "unknown")
                 elif isinstance(first_phone, str):
                     phone = first_phone
-        elif isinstance(phones, str):
-            phone = phones
 
-        # Confidence based on what we got
+        # Confidence based on data found
         confidence = 30
         if email and phone:
             confidence = 90
@@ -316,7 +246,7 @@ def enrich_person(
             email_type=email_type,
             phone=phone,
             phone_type=phone_type,
-            linkedin_url=person.get("linkedinUrl") or person.get("linkedin_url") or linkedin_url,
+            linkedin_url=person.get("linkedinUrl") or linkedin_url,
             company_name=person.get("company", {}).get("name", company_name or "")
                 if isinstance(person.get("company"), dict)
                 else person.get("companyName", company_name or ""),
@@ -332,73 +262,56 @@ def enrich_person(
         return None
 
 
-def search_and_enrich(
-    company_name: str | None = None,
-    company_domain: str | None = None,
-    titles: list[str] | None = None,
-    limit: int = 5,
+def enrich_from_apollo_contacts(
+    apollo_contacts: list,
+    company_name: str = "",
+    company_domain: str = "",
 ) -> list[LushaContact]:
-    """Combined flow: prospect for people, then enrich each with contact info.
+    """Take contacts found by Apollo and enrich them with Lusha for phone + email.
 
-    This is the main function to call from the enrichment pipeline.
-    Uses 2 API calls per contact (1 prospect + 1 enrich).
+    This is the main integration point: Apollo finds WHO works at the company
+    (free tier), then Lusha gets their phone + email (paid data).
 
     Args:
-        company_name: Target company name.
-        company_domain: Target company domain (preferred).
-        titles: Job titles to search for.
-        limit: Max contacts to return.
+        apollo_contacts: List of ApolloContact objects from Apollo people search.
+        company_name: Company name for Lusha lookup.
+        company_domain: Company domain for Lusha lookup.
 
     Returns:
         List of LushaContact objects with phone + email.
     """
-    # Step 1: Find people at the company
-    prospects = prospect_contacts(
-        company_name=company_name,
-        company_domain=company_domain,
-        titles=titles,
-        limit=limit,
-    )
+    results = []
 
-    if not prospects:
-        # Fall back to direct enrichment if we have enough info
-        return []
-
-    contacts = []
-    for prospect in prospects[:limit]:
-        fname = prospect.get("firstName", "")
-        lname = prospect.get("lastName", "")
-        title = prospect.get("jobTitle") or prospect.get("title", "")
-        li_url = prospect.get("linkedinUrl") or prospect.get("linkedin_url")
-
-        if not fname or not lname:
+    for ac in apollo_contacts:
+        if not ac.first_name or not ac.last_name:
             continue
 
-        # Step 2: Enrich each prospect with phone + email
         enriched = enrich_person(
-            first_name=fname,
-            last_name=lname,
+            first_name=ac.first_name,
+            last_name=ac.last_name,
             company_name=company_name,
             company_domain=company_domain,
-            linkedin_url=li_url,
+            linkedin_url=ac.linkedin_url,
         )
 
         if enriched:
-            # Use the title from prospecting if enrichment didn't return one
-            if not enriched.title and title:
-                enriched.title = title
-            contacts.append(enriched)
+            # Keep the title from Apollo if Lusha didn't return one
+            if not enriched.title and ac.title:
+                enriched.title = ac.title
+            results.append(enriched)
         else:
-            # Still save the prospect even without enrichment
-            contacts.append(LushaContact(
-                first_name=fname,
-                last_name=lname,
-                title=title,
-                linkedin_url=li_url,
-                company_name=company_name or "",
-                company_domain=company_domain or "",
-                confidence=20,
-                source="lusha_prospect",
+            # Convert Apollo contact to LushaContact format (no phone/email)
+            results.append(LushaContact(
+                first_name=ac.first_name,
+                last_name=ac.last_name,
+                title=ac.title,
+                email=ac.email,
+                phone=ac.phone,
+                linkedin_url=ac.linkedin_url,
+                company_name=company_name,
+                company_domain=company_domain,
+                confidence=ac.confidence,
+                source="apollo",
             ))
 
-    return contacts
+    return results

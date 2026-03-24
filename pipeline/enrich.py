@@ -103,66 +103,102 @@ def _enrich_single_company(company: dict, owner_id: str) -> int:
         else:
             print(f"    Apollo: no org data found")
 
-    # Step 2: Lusha contact search — find people with phone + email
+    # Step 2: Find people at the company via Apollo, then enrich with Lusha
     contacts_found = 0
 
-    if config.LUSHA_API_KEY:
-        try:
-            from services.lusha_client import search_and_enrich
-
-            print(f"    Searching Lusha for contacts...")
-            lusha_contacts = search_and_enrich(
-                company_name=name,
-                company_domain=domain,
-                limit=5,
-            )
-
-            for contact in lusha_contacts:
-                if not contact.first_name or not contact.last_name:
-                    continue
-
-                is_dm = _is_decision_maker_title(contact.title)
-
-                supabase.table("contacts").insert({
-                    "company_id": company_id,
-                    "owner_id": owner_id,
-                    "first_name": contact.first_name,
-                    "last_name": contact.last_name,
-                    "title": contact.title,
-                    "email": contact.email,
-                    "phone": contact.phone,
-                    "linkedin_url": contact.linkedin_url,
-                    "source": contact.source,
-                    "confidence": contact.confidence,
-                    "is_decision_maker": is_dm,
-                }).execute()
-
-                tag = "DM" if is_dm else "  "
-                email_str = contact.email or "no email"
-                phone_str = contact.phone or "no phone"
-                print(f"    [{tag}] {contact.first_name} {contact.last_name} -- {contact.title}")
-                print(f"         {email_str} | {phone_str}")
-                contacts_found += 1
-
-        except Exception as e:
-            print(f"    Lusha error: {e}")
-
-    # Step 3: Fallback — try Apollo people search if Lusha found nothing
-    if contacts_found == 0 and config.APOLLO_API_KEY:
+    if config.APOLLO_API_KEY:
         try:
             from services.apollo_client import search_people_at_company
 
+            print(f"    Apollo: searching for people...")
             apollo_contacts = search_people_at_company(
                 company_domain=domain,
                 company_name=name,
                 limit=5,
             )
-            for contact in apollo_contacts:
-                if not contact.first_name or not contact.last_name:
-                    continue
 
+            if apollo_contacts and config.LUSHA_API_KEY:
+                # Enrich Apollo contacts with Lusha for phone + email
+                from services.lusha_client import enrich_from_apollo_contacts
+
+                print(f"    Lusha: enriching {len(apollo_contacts)} contact(s) with phone + email...")
+                enriched = enrich_from_apollo_contacts(
+                    apollo_contacts,
+                    company_name=name,
+                    company_domain=domain or "",
+                )
+
+                for contact in enriched:
+                    if not contact.first_name or not contact.last_name:
+                        continue
+
+                    is_dm = _is_decision_maker_title(contact.title)
+
+                    supabase.table("contacts").insert({
+                        "company_id": company_id,
+                        "owner_id": owner_id,
+                        "first_name": contact.first_name,
+                        "last_name": contact.last_name,
+                        "title": contact.title,
+                        "email": contact.email,
+                        "phone": contact.phone,
+                        "linkedin_url": contact.linkedin_url,
+                        "source": contact.source,
+                        "confidence": contact.confidence,
+                        "is_decision_maker": is_dm,
+                    }).execute()
+
+                    tag = "DM" if is_dm else "  "
+                    email_str = contact.email or "no email"
+                    phone_str = contact.phone or "no phone"
+                    print(f"    [{tag}] {contact.first_name} {contact.last_name} -- {contact.title}")
+                    print(f"         {email_str} | {phone_str}")
+                    contacts_found += 1
+
+            elif apollo_contacts:
+                # No Lusha key — save Apollo contacts as-is
+                for contact in apollo_contacts:
+                    if not contact.first_name or not contact.last_name:
+                        continue
+
+                    is_dm = _is_decision_maker_title(contact.title)
+
+                    supabase.table("contacts").insert({
+                        "company_id": company_id,
+                        "owner_id": owner_id,
+                        "first_name": contact.first_name,
+                        "last_name": contact.last_name,
+                        "title": contact.title,
+                        "email": contact.email,
+                        "phone": contact.phone,
+                        "linkedin_url": contact.linkedin_url,
+                        "source": "apollo",
+                        "confidence": contact.confidence,
+                        "is_decision_maker": is_dm,
+                    }).execute()
+
+                    tag = "DM" if is_dm else "  "
+                    email_str = contact.email or "no email"
+                    print(f"    [{tag}] {contact.first_name} {contact.last_name} -- {contact.title} ({email_str})")
+                    contacts_found += 1
+            else:
+                print(f"    Apollo: no people found (free plan may not include people search)")
+        except Exception as e:
+            print(f"    People search error: {e}")
+
+    # Step 3: If no Apollo key, try Lusha directly with company name
+    if contacts_found == 0 and config.LUSHA_API_KEY and not config.APOLLO_API_KEY:
+        try:
+            from services.lusha_client import enrich_person
+
+            print(f"    Lusha: trying direct lookup...")
+            # Try a generic lookup — works best with known names
+            contact = enrich_person(
+                company_name=name,
+                company_domain=domain,
+            )
+            if contact and contact.first_name:
                 is_dm = _is_decision_maker_title(contact.title)
-
                 supabase.table("contacts").insert({
                     "company_id": company_id,
                     "owner_id": owner_id,
@@ -172,14 +208,10 @@ def _enrich_single_company(company: dict, owner_id: str) -> int:
                     "email": contact.email,
                     "phone": contact.phone,
                     "linkedin_url": contact.linkedin_url,
-                    "source": "apollo",
+                    "source": "lusha",
                     "confidence": contact.confidence,
                     "is_decision_maker": is_dm,
                 }).execute()
-
-                tag = "DM" if is_dm else "  "
-                email_str = contact.email or "no email"
-                print(f"    [{tag}] {contact.first_name} {contact.last_name} -- {contact.title} ({email_str})")
                 contacts_found += 1
         except Exception:
             pass
